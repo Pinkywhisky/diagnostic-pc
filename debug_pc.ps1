@@ -16,10 +16,9 @@ $mailPass = "yuttmuagkfqhyaxd"
 # =========================
 # CONFIG APP / UPDATE
 # =========================
-$AppVersion = "1.0"
+$AppVersion = "1.1"
 $GitHubLatestApiUrl = "https://api.github.com/repos/Pinkywhisky/diagnostic-pc/releases/latest"
-$GitHubLatestUrl    = "https://github.com/Pinkywhisky/diagnostic-pc/releases/latest"
-$SetupAssetName     = "Setup_Diagnostic_PC.exe"
+$SetupAssetName = "Setup_Diagnostic_PC.exe"
 
 # =========================
 # VARIABLES GLOBALES
@@ -76,8 +75,8 @@ $buttonClose.Size = New-Object System.Drawing.Size(100, 35)
 $buttonClose.Anchor = "Top,Right"
 
 $panelBottom.Add_Resize({
-        $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 15), 12)
-    })
+    $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 15), 12)
+})
 
 $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 15), 12)
 
@@ -148,109 +147,6 @@ function Get-NormalizedVersionString {
     return $normalized
 }
 
-function Test-AppUpdate {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$CurrentVersion,
-        [Parameter(Mandatory = $true)]
-        [string]$ApiUrl
-    )
-
-    try {
-        $headers = @{
-            "User-Agent" = "Diagnostic-PC"
-        }
-
-        $release = Invoke-RestMethod -Uri $ApiUrl -Headers $headers -Method Get -ErrorAction Stop
-
-        $latestTag = $release.tag_name
-        if ([string]::IsNullOrWhiteSpace($latestTag)) {
-            throw "Impossible de lire le tag de la dernière release."
-        }
-
-        $currentNormalized = Get-NormalizedVersionString -VersionText $CurrentVersion
-        $latestNormalized  = Get-NormalizedVersionString -VersionText $latestTag
-
-        $currentVersionObj = [version]$currentNormalized
-        $latestVersionObj  = [version]$latestNormalized
-
-        return [pscustomobject]@{
-            Success          = $true
-            CurrentVersion   = $currentNormalized
-            LatestVersion    = $latestNormalized
-            LatestTag        = $latestTag
-            UpdateAvailable  = ($latestVersionObj -gt $currentVersionObj)
-            ReleaseName      = $release.name
-            HtmlUrl          = $release.html_url
-        }
-    }
-    catch {
-        return [pscustomobject]@{
-            Success         = $false
-            ErrorMessage    = $_.Exception.Message
-            UpdateAvailable = $false
-        }
-    }
-}
-
-function Send-DiagMail {
-    param(
-        [string]$Subject,
-        [string]$Body
-    )
-
-    try {
-        if ([string]::IsNullOrWhiteSpace($mailPass)) {
-            throw "Mot de passe Gmail non configuré."
-        }
-
-        $message = New-Object System.Net.Mail.MailMessage
-        $message.From = $mailFrom
-        $message.To.Add($mailTo)
-        $message.Subject = $Subject
-        $message.Body = $Body
-        $message.IsBodyHtml = $false
-        $message.BodyEncoding = [System.Text.Encoding]::UTF8
-        $message.SubjectEncoding = [System.Text.Encoding]::UTF8
-
-        $smtp = New-Object System.Net.Mail.SmtpClient($smtpServer, $smtpPort)
-        $smtp.EnableSsl = $smtpSsl
-        $smtp.Credentials = New-Object System.Net.NetworkCredential($mailUser, $mailPass)
-
-        $smtp.Send($message)
-
-        [System.Windows.Forms.MessageBox]::Show(
-            "Mail envoyé avec succès.",
-            "Envoi réussi",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
-    }
-    catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Erreur lors de l'envoi du mail : $($_.Exception.Message)",
-            "Erreur d'envoi",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        ) | Out-Null
-    }
-}
-
-function Get-NormalizedVersionString {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$VersionText
-    )
-
-    $normalized = $VersionText.Trim()
-
-    if ($normalized.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
-        $normalized = $normalized.Substring(1)
-    }
-
-    return $normalized
-}
-
 function Get-LatestReleaseInfo {
     param(
         [Parameter(Mandatory = $true)]
@@ -274,10 +170,10 @@ function Get-LatestReleaseInfo {
         }
 
         $currentNormalized = Get-NormalizedVersionString -VersionText $CurrentVersion
-        $latestNormalized  = Get-NormalizedVersionString -VersionText $latestTag
+        $latestNormalized = Get-NormalizedVersionString -VersionText $latestTag
 
         $currentVersionObj = [version]$currentNormalized
-        $latestVersionObj  = [version]$latestNormalized
+        $latestVersionObj = [version]$latestNormalized
 
         $asset = $release.assets | Where-Object { $_.name -eq $ExpectedAssetName } | Select-Object -First 1
         if (-not $asset) {
@@ -321,6 +217,49 @@ function Start-AppUpdate {
     }
 
     Start-Process -FilePath $tempFile
+}
+
+function Send-DiagMail {
+    param(
+        [string]$Subject,
+        [string]$Body
+    )
+
+    try {
+        if ([string]::IsNullOrWhiteSpace($mailPass)) {
+            throw "Mot de passe Gmail non configuré."
+        }
+
+        $message = New-Object System.Net.Mail.MailMessage
+        $message.From = $mailFrom
+        $message.To.Add($mailTo)
+        $message.Subject = $Subject
+        $message.Body = $Body
+        $message.IsBodyHtml = $false
+        $message.BodyEncoding = [System.Text.Encoding]::UTF8
+        $message.SubjectEncoding = [System.Text.Encoding]::UTF8
+
+        $smtp = New-Object System.Net.Mail.SmtpClient($smtpServer, $smtpPort)
+        $smtp.EnableSsl = $smtpSsl
+        $smtp.Credentials = New-Object System.Net.NetworkCredential($mailUser, $mailPass)
+
+        $smtp.Send($message)
+
+        [System.Windows.Forms.MessageBox]::Show(
+            "Mail envoyé avec succès.",
+            "Envoi réussi",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Erreur lors de l'envoi du mail : $($_.Exception.Message)",
+            "Erreur d'envoi",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
+    }
 }
 
 function Start-Diag {
@@ -740,48 +679,48 @@ function Start-Diag {
 # ACTIONS
 # =========================
 $buttonRun.Add_Click({
-        $buttonRun.Enabled = $false
-        $buttonRun.Text = "En cours..."
-        $form.Cursor = "WaitCursor"
-        $form.Refresh()
+    $buttonRun.Enabled = $false
+    $buttonRun.Text = "En cours..."
+    $form.Cursor = "WaitCursor"
+    $form.Refresh()
 
-        try {
-            Start-Diag
-        }
-        finally {
-            $buttonRun.Enabled = $true
-            $buttonRun.Text = "Lancer le diagnostic"
-            $form.Cursor = "Default"
-        }
-    })
+    try {
+        Start-Diag
+    }
+    finally {
+        $buttonRun.Enabled = $true
+        $buttonRun.Text = "Lancer le diagnostic"
+        $form.Cursor = "Default"
+    }
+})
 
 $buttonMail.Add_Click({
-        if ([string]::IsNullOrWhiteSpace($script:LastReport)) {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Aucun diagnostic à envoyer. Lance d'abord le diagnostic.",
-                "Information",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            ) | Out-Null
-            return
-        }
+    if ([string]::IsNullOrWhiteSpace($script:LastReport)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Aucun diagnostic à envoyer. Lance d'abord le diagnostic.",
+            "Information",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+        return
+    }
 
-        $confirmation = [System.Windows.Forms.MessageBox]::Show(
-            "Autorisez-vous l'envoi du résultat à Gérald Laronche par mail ?",
-            "Confirmation d'envoi",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Question
-        )
+    $confirmation = [System.Windows.Forms.MessageBox]::Show(
+        "Autorisez-vous l'envoi du résultat à Gérald Laronche par mail ?",
+        "Confirmation d'envoi",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Question
+    )
 
-        if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
-            $subject = "Diagnostic PC - $env:COMPUTERNAME - $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
-            Send-DiagMail -Subject $subject -Body $script:LastReport
-        }
-    })
+    if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
+        $subject = "Diagnostic PC - $env:COMPUTERNAME - $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+        Send-DiagMail -Subject $subject -Body $script:LastReport
+    }
+})
 
 $buttonClose.Add_Click({
-        $form.Close()
-    })
+    $form.Close()
+})
 
 $buttonUpdate.Add_Click({
     $buttonUpdate.Enabled = $false
@@ -856,6 +795,7 @@ $buttonUpdate.Add_Click({
         }
     }
 })
+
 # =========================
 # AFFICHAGE
 # =========================
