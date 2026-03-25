@@ -1,10 +1,6 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-#[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new()
-#[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-#$OutputEncoding = [Console]::OutputEncoding
-
 # =========================
 # CONFIG MAIL GMAIL
 # =========================
@@ -18,6 +14,13 @@ $mailUser = "gerald.laronche@gmail.com"
 $mailPass = "yuttmuagkfqhyaxd"
 
 # =========================
+# CONFIG APP / UPDATE
+# =========================
+$AppVersion = "1.0"
+$GitHubLatestApiUrl = "https://api.github.com/repos/Pinkywhisky/diagnostic-pc/releases/latest"
+$GitHubLatestUrl    = "https://github.com/Pinkywhisky/diagnostic-pc/releases/latest"
+
+# =========================
 # VARIABLES GLOBALES
 # =========================
 $script:LastReport = ""
@@ -26,7 +29,7 @@ $script:LastReport = ""
 # FENETRE PRINCIPALE
 # =========================
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Diagnostic PC"
+$form.Text = "Diagnostic PC v$AppVersion"
 $form.Size = New-Object System.Drawing.Size(1000, 700)
 $form.MinimumSize = New-Object System.Drawing.Size(700, 450)
 $form.StartPosition = "CenterScreen"
@@ -61,6 +64,11 @@ $buttonMail.Text = "Envoyer par mail"
 $buttonMail.Size = New-Object System.Drawing.Size(140, 35)
 $buttonMail.Location = New-Object System.Drawing.Point(210, 12)
 
+$buttonUpdate = New-Object System.Windows.Forms.Button
+$buttonUpdate.Text = "Mise à jour"
+$buttonUpdate.Size = New-Object System.Drawing.Size(120, 35)
+$buttonUpdate.Location = New-Object System.Drawing.Point(360, 12)
+
 $buttonClose = New-Object System.Windows.Forms.Button
 $buttonClose.Text = "Fermer"
 $buttonClose.Size = New-Object System.Drawing.Size(100, 35)
@@ -74,6 +82,7 @@ $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize
 
 $panelBottom.Controls.Add($buttonRun)
 $panelBottom.Controls.Add($buttonMail)
+$panelBottom.Controls.Add($buttonUpdate)
 $panelBottom.Controls.Add($buttonClose)
 
 $form.Controls.Add($textBox)
@@ -120,6 +129,66 @@ function Add-WarningProblem {
 
     if (-not [string]::IsNullOrWhiteSpace($Message) -and -not $ProblemList.Value.Contains($Message)) {
         $ProblemList.Value.Add($Message) | Out-Null
+    }
+}
+
+function Get-NormalizedVersionString {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VersionText
+    )
+
+    $normalized = $VersionText.Trim()
+
+    if ($normalized.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $normalized = $normalized.Substring(1)
+    }
+
+    return $normalized
+}
+
+function Test-AppUpdate {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CurrentVersion,
+        [Parameter(Mandatory = $true)]
+        [string]$ApiUrl
+    )
+
+    try {
+        $headers = @{
+            "User-Agent" = "Diagnostic-PC"
+        }
+
+        $release = Invoke-RestMethod -Uri $ApiUrl -Headers $headers -Method Get -ErrorAction Stop
+
+        $latestTag = $release.tag_name
+        if ([string]::IsNullOrWhiteSpace($latestTag)) {
+            throw "Impossible de lire le tag de la dernière release."
+        }
+
+        $currentNormalized = Get-NormalizedVersionString -VersionText $CurrentVersion
+        $latestNormalized  = Get-NormalizedVersionString -VersionText $latestTag
+
+        $currentVersionObj = [version]$currentNormalized
+        $latestVersionObj  = [version]$latestNormalized
+
+        return [pscustomobject]@{
+            Success          = $true
+            CurrentVersion   = $currentNormalized
+            LatestVersion    = $latestNormalized
+            LatestTag        = $latestTag
+            UpdateAvailable  = ($latestVersionObj -gt $currentVersionObj)
+            ReleaseName      = $release.name
+            HtmlUrl          = $release.html_url
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Success         = $false
+            ErrorMessage    = $_.Exception.Message
+            UpdateAvailable = $false
+        }
     }
 }
 
@@ -626,6 +695,52 @@ $buttonClose.Add_Click({
         $form.Close()
     })
 
+$buttonUpdate.Add_Click({
+    $buttonUpdate.Enabled = $false
+    $buttonUpdate.Text = "Vérification..."
+    $form.Cursor = "WaitCursor"
+    $form.Refresh()
+
+    try {
+        $updateResult = Test-AppUpdate -CurrentVersion $AppVersion -ApiUrl $GitHubLatestApiUrl
+
+        if (-not $updateResult.Success) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Impossible de vérifier les mises à jour : $($updateResult.ErrorMessage)",
+                "Mise à jour",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+            return
+        }
+
+        if ($updateResult.UpdateAvailable) {
+            $choice = [System.Windows.Forms.MessageBox]::Show(
+                "Nouvelle version disponible : $($updateResult.LatestVersion)`r`nVersion actuelle : $($updateResult.CurrentVersion)`r`n`r`nVoulez-vous ouvrir la page de téléchargement ?",
+                "Mise à jour disponible",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+
+            if ($choice -eq [System.Windows.Forms.DialogResult]::Yes) {
+                Start-Process $GitHubLatestUrl
+            }
+        }
+        else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Vous avez déjà la dernière version ($($updateResult.CurrentVersion)).",
+                "Mise à jour",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            ) | Out-Null
+        }
+    }
+    finally {
+        $buttonUpdate.Enabled = $true
+        $buttonUpdate.Text = "Mise à jour"
+        $form.Cursor = "Default"
+    }
+})
 # =========================
 # AFFICHAGE
 # =========================
