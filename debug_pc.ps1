@@ -208,7 +208,28 @@ function Start-AppUpdate {
         [string]$FileName
     )
 
-    $tempFile = Join-Path $env:TEMP $FileName
+    if ([string]::IsNullOrWhiteSpace($DownloadUrl)) {
+        throw "URL de téléchargement vide."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FileName)) {
+        throw "Nom de fichier vide."
+    }
+
+    if (-not $FileName.EndsWith(".exe", [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Le fichier de mise à jour n'est pas un exécutable valide."
+    }
+
+    $tempDir = Join-Path $env:TEMP "DiagnosticPC"
+    if (-not (Test-Path $tempDir)) {
+        New-Item -ItemType Directory -Path $tempDir | Out-Null
+    }
+
+    $tempFile = Join-Path $tempDir $FileName
+
+    if (Test-Path $tempFile) {
+        Remove-Item $tempFile -Force
+    }
 
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
 
@@ -216,7 +237,12 @@ function Start-AppUpdate {
         throw "Le fichier téléchargé est introuvable : $tempFile"
     }
 
-    Start-Process -FilePath $tempFile
+    $fileInfo = Get-Item $tempFile
+    if ($fileInfo.Length -le 0) {
+        throw "Le fichier téléchargé est vide."
+    }
+
+    return $tempFile
 }
 
 function Send-DiagMail {
@@ -282,6 +308,7 @@ function Start-Diag {
     Add-TextLine "Nom du poste : $env:COMPUTERNAME"
     Add-TextLine "Utilisateur  : $env:USERNAME"
     Add-TextLine "Date         : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+    Add-TextLine "Version outil : $AppVersion"
     Add-TextLine ""
 
     Add-TextLine "[SYSTEME]"
@@ -768,15 +795,20 @@ $buttonUpdate.Add_Click({
         $buttonUpdate.Text = "Téléchargement..."
         $form.Refresh()
 
-        Start-AppUpdate -DownloadUrl $updateResult.AssetUrl -FileName $updateResult.AssetName
+        $setupPath = Start-AppUpdate -DownloadUrl $updateResult.AssetUrl -FileName $updateResult.AssetName
 
-        [System.Windows.Forms.MessageBox]::Show(
-            "Le programme d'installation va être lancé.`r`nL'application va maintenant se fermer.",
-            "Mise à jour",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
+        $finalChoice = [System.Windows.Forms.MessageBox]::Show(
+            "La mise à jour a été téléchargée avec succès.`r`n`r`nVoulez-vous lancer l'installation maintenant ?",
+            "Mise à jour prête",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
+        )
 
+        if ($finalChoice -ne [System.Windows.Forms.DialogResult]::Yes) {
+            return
+        }
+
+        Start-Process -FilePath $setupPath
         $form.Close()
     }
     catch {
