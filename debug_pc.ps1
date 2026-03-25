@@ -19,6 +19,7 @@ $mailPass = "yuttmuagkfqhyaxd"
 $AppVersion = "1.0"
 $GitHubLatestApiUrl = "https://api.github.com/repos/Pinkywhisky/diagnostic-pc/releases/latest"
 $GitHubLatestUrl    = "https://github.com/Pinkywhisky/diagnostic-pc/releases/latest"
+$SetupAssetName     = "Setup_Diagnostic_PC.exe"
 
 # =========================
 # VARIABLES GLOBALES
@@ -233,6 +234,93 @@ function Send-DiagMail {
             [System.Windows.Forms.MessageBoxIcon]::Error
         ) | Out-Null
     }
+}
+
+function Get-NormalizedVersionString {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VersionText
+    )
+
+    $normalized = $VersionText.Trim()
+
+    if ($normalized.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $normalized = $normalized.Substring(1)
+    }
+
+    return $normalized
+}
+
+function Get-LatestReleaseInfo {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ApiUrl,
+        [Parameter(Mandatory = $true)]
+        [string]$CurrentVersion,
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedAssetName
+    )
+
+    try {
+        $headers = @{
+            "User-Agent" = "Diagnostic-PC"
+        }
+
+        $release = Invoke-RestMethod -Uri $ApiUrl -Headers $headers -Method Get -ErrorAction Stop
+
+        $latestTag = $release.tag_name
+        if ([string]::IsNullOrWhiteSpace($latestTag)) {
+            throw "Impossible de lire le tag de la dernière release."
+        }
+
+        $currentNormalized = Get-NormalizedVersionString -VersionText $CurrentVersion
+        $latestNormalized  = Get-NormalizedVersionString -VersionText $latestTag
+
+        $currentVersionObj = [version]$currentNormalized
+        $latestVersionObj  = [version]$latestNormalized
+
+        $asset = $release.assets | Where-Object { $_.name -eq $ExpectedAssetName } | Select-Object -First 1
+        if (-not $asset) {
+            throw "Impossible de trouver l'asset '$ExpectedAssetName' dans la dernière release."
+        }
+
+        return [pscustomobject]@{
+            Success         = $true
+            CurrentVersion  = $currentNormalized
+            LatestVersion   = $latestNormalized
+            LatestTag       = $latestTag
+            UpdateAvailable = ($latestVersionObj -gt $currentVersionObj)
+            HtmlUrl         = $release.html_url
+            AssetName       = $asset.name
+            AssetUrl        = $asset.browser_download_url
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Success         = $false
+            ErrorMessage    = $_.Exception.Message
+            UpdateAvailable = $false
+        }
+    }
+}
+
+function Start-AppUpdate {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DownloadUrl,
+        [Parameter(Mandatory = $true)]
+        [string]$FileName
+    )
+
+    $tempFile = Join-Path $env:TEMP $FileName
+
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
+
+    if (-not (Test-Path $tempFile)) {
+        throw "Le fichier téléchargé est introuvable : $tempFile"
+    }
+
+    Start-Process -FilePath $tempFile
 }
 
 function Start-Diag {
@@ -702,7 +790,10 @@ $buttonUpdate.Add_Click({
     $form.Refresh()
 
     try {
-        $updateResult = Test-AppUpdate -CurrentVersion $AppVersion -ApiUrl $GitHubLatestApiUrl
+        $updateResult = Get-LatestReleaseInfo `
+            -ApiUrl $GitHubLatestApiUrl `
+            -CurrentVersion $AppVersion `
+            -ExpectedAssetName $SetupAssetName
 
         if (-not $updateResult.Success) {
             [System.Windows.Forms.MessageBox]::Show(
@@ -714,31 +805,55 @@ $buttonUpdate.Add_Click({
             return
         }
 
-        if ($updateResult.UpdateAvailable) {
-            $choice = [System.Windows.Forms.MessageBox]::Show(
-                "Nouvelle version disponible : $($updateResult.LatestVersion)`r`nVersion actuelle : $($updateResult.CurrentVersion)`r`n`r`nVoulez-vous ouvrir la page de téléchargement ?",
-                "Mise à jour disponible",
-                [System.Windows.Forms.MessageBoxButtons]::YesNo,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            )
-
-            if ($choice -eq [System.Windows.Forms.DialogResult]::Yes) {
-                Start-Process $GitHubLatestUrl
-            }
-        }
-        else {
+        if (-not $updateResult.UpdateAvailable) {
             [System.Windows.Forms.MessageBox]::Show(
                 "Vous avez déjà la dernière version ($($updateResult.CurrentVersion)).",
                 "Mise à jour",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information
             ) | Out-Null
+            return
         }
+
+        $choice = [System.Windows.Forms.MessageBox]::Show(
+            "Nouvelle version disponible : $($updateResult.LatestVersion)`r`nVersion actuelle : $($updateResult.CurrentVersion)`r`n`r`nVoulez-vous télécharger et lancer l'installation ?",
+            "Mise à jour disponible",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
+
+        if ($choice -ne [System.Windows.Forms.DialogResult]::Yes) {
+            return
+        }
+
+        $buttonUpdate.Text = "Téléchargement..."
+        $form.Refresh()
+
+        Start-AppUpdate -DownloadUrl $updateResult.AssetUrl -FileName $updateResult.AssetName
+
+        [System.Windows.Forms.MessageBox]::Show(
+            "Le programme d'installation va être lancé.`r`nL'application va maintenant se fermer.",
+            "Mise à jour",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+
+        $form.Close()
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Erreur pendant la mise à jour : $($_.Exception.Message)",
+            "Mise à jour",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        ) | Out-Null
     }
     finally {
-        $buttonUpdate.Enabled = $true
-        $buttonUpdate.Text = "Mise à jour"
-        $form.Cursor = "Default"
+        if (-not $form.IsDisposed) {
+            $buttonUpdate.Enabled = $true
+            $buttonUpdate.Text = "Mise à jour"
+            $form.Cursor = "Default"
+        }
     }
 })
 # =========================

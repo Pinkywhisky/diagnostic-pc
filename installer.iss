@@ -1,7 +1,7 @@
 [Setup]
 AppName=Diagnostic PC
-AppVersion=1.0
-DefaultDirName={pf}\DiagnosticPC
+AppVersion=1.1
+DefaultDirName={commonpf}\DiagnosticPC
 DefaultGroupName=Diagnostic PC
 OutputBaseFilename=Setup_Diagnostic_PC
 Compression=lzma
