@@ -5,7 +5,7 @@ Outil simple pour diagnostiquer un PC Windows.
 ## Installation
 
 1. Télécharger la dernière version :
-👉 https://github.com/<ton_user>/diagnostic-pc/releases/latest
+👉 https://github.com/Pinkywhisky/diagnostic-pc/releases/latest
 
 2. Lancer le setup
 
