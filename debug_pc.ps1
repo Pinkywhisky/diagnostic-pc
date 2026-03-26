@@ -24,15 +24,48 @@ $SetupAssetName = "Setup_Diagnostic_PC.exe"
 # VARIABLES GLOBALES
 # =========================
 $script:LastReport = ""
+$script:UpdateChecked = $false
 
 # =========================
 # FENETRE PRINCIPALE
 # =========================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Diagnostic PC v$AppVersion"
-$form.Size = New-Object System.Drawing.Size(1000, 700)
-$form.MinimumSize = New-Object System.Drawing.Size(700, 450)
+$form.Size = New-Object System.Drawing.Size(1000, 720)
+$form.MinimumSize = New-Object System.Drawing.Size(760, 520)
 $form.StartPosition = "CenterScreen"
+$form.BackColor = [System.Drawing.Color]::White
+
+# =========================
+# HEADER
+# =========================
+$panelTop = New-Object System.Windows.Forms.Panel
+$panelTop.Dock = "Top"
+$panelTop.Height = 95
+$panelTop.BackColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
+
+$labelTitle = New-Object System.Windows.Forms.Label
+$labelTitle.Text = "Diagnostic PC"
+$labelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+$labelTitle.AutoSize = $true
+$labelTitle.Location = New-Object System.Drawing.Point(16, 12)
+
+$labelVersion = New-Object System.Windows.Forms.Label
+$labelVersion.Text = "Version $AppVersion"
+$labelVersion.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelVersion.ForeColor = [System.Drawing.Color]::DimGray
+$labelVersion.AutoSize = $true
+$labelVersion.Location = New-Object System.Drawing.Point(19, 48)
+
+$labelInfo = New-Object System.Windows.Forms.Label
+$labelInfo.Text = "1. Lancez le diagnostic   2. Envoyez le résultat par mail"
+$labelInfo.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$labelInfo.AutoSize = $true
+$labelInfo.Location = New-Object System.Drawing.Point(16, 68)
+
+$panelTop.Controls.Add($labelTitle)
+$panelTop.Controls.Add($labelVersion)
+$panelTop.Controls.Add($labelInfo)
 
 # =========================
 # ZONE TEXTE
@@ -43,50 +76,73 @@ $textBox.ScrollBars = "Vertical"
 $textBox.ReadOnly = $true
 $textBox.Font = New-Object System.Drawing.Font("Consolas", 10)
 $textBox.Dock = "Fill"
+$textBox.BackColor = [System.Drawing.Color]::White
+$textBox.BorderStyle = "FixedSingle"
+
+$panelMain = New-Object System.Windows.Forms.Panel
+$panelMain.Dock = "Fill"
+$panelMain.Padding = New-Object System.Windows.Forms.Padding(12)
+$panelMain.Controls.Add($textBox)
 
 # =========================
 # PANEL BAS
 # =========================
 $panelBottom = New-Object System.Windows.Forms.Panel
-$panelBottom.Height = 60
+$panelBottom.Height = 70
 $panelBottom.Dock = "Bottom"
+$panelBottom.BackColor = [System.Drawing.Color]::FromArgb(248, 248, 248)
+
+$statusLabel = New-Object System.Windows.Forms.Label
+$statusLabel.Text = "Prêt"
+$statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$statusLabel.AutoSize = $true
+$statusLabel.Location = New-Object System.Drawing.Point(16, 12)
+$statusLabel.ForeColor = [System.Drawing.Color]::DimGray
 
 # =========================
 # BOUTONS
 # =========================
 $buttonRun = New-Object System.Windows.Forms.Button
 $buttonRun.Text = "Lancer le diagnostic"
-$buttonRun.Size = New-Object System.Drawing.Size(180, 35)
-$buttonRun.Location = New-Object System.Drawing.Point(15, 12)
+$buttonRun.Size = New-Object System.Drawing.Size(180, 34)
+$buttonRun.Location = New-Object System.Drawing.Point(16, 28)
+$buttonRun.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$buttonRun.FlatStyle = "Flat"
+$buttonRun.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+$buttonRun.ForeColor = [System.Drawing.Color]::White
+$buttonRun.FlatAppearance.BorderSize = 0
 
 $buttonMail = New-Object System.Windows.Forms.Button
 $buttonMail.Text = "Envoyer par mail"
-$buttonMail.Size = New-Object System.Drawing.Size(140, 35)
-$buttonMail.Location = New-Object System.Drawing.Point(210, 12)
-
-$buttonUpdate = New-Object System.Windows.Forms.Button
-$buttonUpdate.Text = "Mise à jour"
-$buttonUpdate.Size = New-Object System.Drawing.Size(120, 35)
-$buttonUpdate.Location = New-Object System.Drawing.Point(360, 12)
+$buttonMail.Size = New-Object System.Drawing.Size(140, 34)
+$buttonMail.Location = New-Object System.Drawing.Point(210, 28)
+$buttonMail.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$buttonMail.FlatStyle = "Flat"
+$buttonMail.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+$buttonMail.FlatAppearance.BorderColor = [System.Drawing.Color]::Silver
 
 $buttonClose = New-Object System.Windows.Forms.Button
 $buttonClose.Text = "Fermer"
-$buttonClose.Size = New-Object System.Drawing.Size(100, 35)
-$buttonClose.Anchor = "Top,Right"
+$buttonClose.Size = New-Object System.Drawing.Size(100, 34)
+$buttonClose.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$buttonClose.FlatStyle = "Flat"
+$buttonClose.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+$buttonClose.FlatAppearance.BorderColor = [System.Drawing.Color]::Silver
 
 $panelBottom.Add_Resize({
-    $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 15), 12)
+    $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 16), 28)
 })
 
-$buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 15), 12)
+$buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 16), 28)
 
+$panelBottom.Controls.Add($statusLabel)
 $panelBottom.Controls.Add($buttonRun)
 $panelBottom.Controls.Add($buttonMail)
-$panelBottom.Controls.Add($buttonUpdate)
 $panelBottom.Controls.Add($buttonClose)
 
-$form.Controls.Add($textBox)
+$form.Controls.Add($panelMain)
 $form.Controls.Add($panelBottom)
+$form.Controls.Add($panelTop)
 
 $form.AcceptButton = $buttonRun
 $form.CancelButton = $buttonClose
@@ -94,9 +150,20 @@ $form.CancelButton = $buttonClose
 # =========================
 # FONCTIONS
 # =========================
+function Set-Status {
+    param(
+        [string]$Text
+    )
+
+    $statusLabel.Text = $Text
+    $statusLabel.Refresh()
+}
+
 function Add-TextLine {
     param([string]$Text)
     $textBox.AppendText($Text + [Environment]::NewLine)
+    $textBox.SelectionStart = $textBox.Text.Length
+    $textBox.ScrollToCaret()
 }
 
 function Add-Separator {
@@ -186,7 +253,6 @@ function Get-LatestReleaseInfo {
             LatestVersion   = $latestNormalized
             LatestTag       = $latestTag
             UpdateAvailable = ($latestVersionObj -gt $currentVersionObj)
-            HtmlUrl         = $release.html_url
             AssetName       = $asset.name
             AssetUrl        = $asset.browser_download_url
         }
@@ -288,8 +354,44 @@ function Send-DiagMail {
     }
 }
 
+function Test-TcpPort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HostName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Port,
+
+        [int]$TimeoutMs = 3000
+    )
+
+    $client = $null
+
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $asyncResult = $client.BeginConnect($HostName, $Port, $null, $null)
+
+        if (-not $asyncResult.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+            return $false
+        }
+
+        $client.EndConnect($asyncResult)
+        return $true
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($client) {
+            $client.Close()
+            $client.Dispose()
+        }
+    }
+}
+
 function Start-Diag {
     $textBox.Clear()
+    Set-Status "Diagnostic en cours..."
 
     $passerelle = "192.168.0.254"
     $internet = "8.8.8.8"
@@ -408,7 +510,8 @@ function Start-Diag {
     Add-TextLine "[PORTS]"
     foreach ($port in $ports) {
         try {
-            $result = Test-NetConnection -ComputerName $portTarget -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue
+            $result = Test-TcpPort -HostName $portTarget -Port $port -TimeoutMs 3000
+
             if ($result) {
                 Add-TextLine "OK - Port $port joignable sur $portTarget"
             }
@@ -700,6 +803,60 @@ function Start-Diag {
     }
 
     $script:LastReport = $textBox.Text
+    Set-Status "Diagnostic terminé"
+}
+
+function Invoke-StartupUpdateCheck {
+    try {
+        Set-Status "Vérification des mises à jour..."
+        $updateResult = Get-LatestReleaseInfo `
+            -ApiUrl $GitHubLatestApiUrl `
+            -CurrentVersion $AppVersion `
+            -ExpectedAssetName $SetupAssetName
+
+        if (-not $updateResult.Success) {
+            Set-Status "Prêt"
+            return
+        }
+
+        if (-not $updateResult.UpdateAvailable) {
+            Set-Status "Prêt"
+            return
+        }
+
+        $choice = [System.Windows.Forms.MessageBox]::Show(
+            "Une nouvelle version est disponible : $($updateResult.LatestVersion)`r`nVersion actuelle : $($updateResult.CurrentVersion)`r`n`r`nVoulez-vous télécharger et lancer l'installation ?",
+            "Mise à jour disponible",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
+
+        if ($choice -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Set-Status "Prêt"
+            return
+        }
+
+        Set-Status "Téléchargement de la mise à jour..."
+        $setupPath = Start-AppUpdate -DownloadUrl $updateResult.AssetUrl -FileName $updateResult.AssetName
+
+        $finalChoice = [System.Windows.Forms.MessageBox]::Show(
+            "La mise à jour a été téléchargée avec succès.`r`n`r`nVoulez-vous lancer l'installation maintenant ?",
+            "Mise à jour prête",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
+
+        if ($finalChoice -ne [System.Windows.Forms.DialogResult]::Yes) {
+            Set-Status "Prêt"
+            return
+        }
+
+        Start-Process -FilePath $setupPath
+        $form.Close()
+    }
+    catch {
+        Set-Status "Prêt"
+    }
 }
 
 # =========================
@@ -749,83 +906,23 @@ $buttonClose.Add_Click({
     $form.Close()
 })
 
-$buttonUpdate.Add_Click({
-    $buttonUpdate.Enabled = $false
-    $buttonUpdate.Text = "Vérification..."
-    $form.Cursor = "WaitCursor"
-    $form.Refresh()
+# =========================
+# UPDATE AUTO AU DEMARRAGE
+# =========================
+$startupTimer = New-Object System.Windows.Forms.Timer
+$startupTimer.Interval = 800
 
-    try {
-        $updateResult = Get-LatestReleaseInfo `
-            -ApiUrl $GitHubLatestApiUrl `
-            -CurrentVersion $AppVersion `
-            -ExpectedAssetName $SetupAssetName
+$startupTimer.Add_Tick({
+    $startupTimer.Stop()
 
-        if (-not $updateResult.Success) {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Impossible de vérifier les mises à jour : $($updateResult.ErrorMessage)",
-                "Mise à jour",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Warning
-            ) | Out-Null
-            return
-        }
-
-        if (-not $updateResult.UpdateAvailable) {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Vous avez déjà la dernière version ($($updateResult.CurrentVersion)).",
-                "Mise à jour",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information
-            ) | Out-Null
-            return
-        }
-
-        $choice = [System.Windows.Forms.MessageBox]::Show(
-            "Nouvelle version disponible : $($updateResult.LatestVersion)`r`nVersion actuelle : $($updateResult.CurrentVersion)`r`n`r`nVoulez-vous télécharger et lancer l'installation ?",
-            "Mise à jour disponible",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        )
-
-        if ($choice -ne [System.Windows.Forms.DialogResult]::Yes) {
-            return
-        }
-
-        $buttonUpdate.Text = "Téléchargement..."
-        $form.Refresh()
-
-        $setupPath = Start-AppUpdate -DownloadUrl $updateResult.AssetUrl -FileName $updateResult.AssetName
-
-        $finalChoice = [System.Windows.Forms.MessageBox]::Show(
-            "La mise à jour a été téléchargée avec succès.`r`n`r`nVoulez-vous lancer l'installation maintenant ?",
-            "Mise à jour prête",
-            [System.Windows.Forms.MessageBoxButtons]::YesNo,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        )
-
-        if ($finalChoice -ne [System.Windows.Forms.DialogResult]::Yes) {
-            return
-        }
-
-        Start-Process -FilePath $setupPath
-        $form.Close()
+    if (-not $script:UpdateChecked) {
+        $script:UpdateChecked = $true
+        Invoke-StartupUpdateCheck
     }
-    catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Erreur pendant la mise à jour : $($_.Exception.Message)",
-            "Mise à jour",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        ) | Out-Null
-    }
-    finally {
-        if (-not $form.IsDisposed) {
-            $buttonUpdate.Enabled = $true
-            $buttonUpdate.Text = "Mise à jour"
-            $form.Cursor = "Default"
-        }
-    }
+})
+
+$form.Add_Shown({
+    $startupTimer.Start()
 })
 
 # =========================
