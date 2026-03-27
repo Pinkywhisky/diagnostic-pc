@@ -16,7 +16,7 @@ $mailPass = "yuttmuagkfqhyaxd"
 # =========================
 # CONFIG APP / UPDATE
 # =========================
-$AppVersion = "1.1"
+$AppVersion = "1.2"
 $GitHubLatestApiUrl = "https://api.github.com/repos/Pinkywhisky/diagnostic-pc/releases/latest"
 $SetupAssetName = "Setup_Diagnostic_PC.exe"
 
