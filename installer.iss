@@ -1,6 +1,6 @@
 [Setup]
 AppName=Diagnostic PC
-AppVersion=1.2
+AppVersion=1.3
 DefaultDirName={commonpf}\DiagnosticPC
 DefaultGroupName=Diagnostic PC
 OutputBaseFilename=Setup_Diagnostic_PC

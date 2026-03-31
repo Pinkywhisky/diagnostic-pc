@@ -1,29 +1,53 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# =========================
-# CONFIG MAIL GMAIL
-# =========================
-$smtpServer = "smtp.gmail.com"
-$smtpPort = 587
-$smtpSsl = $true
+# ============================================================
+# Diagnostic PC
+# ------------------------------------------------------------
+# Script PowerShell WinForms pour :
+# - lancer un diagnostic local du poste
+# - afficher un rapport lisible dans une interface graphique
+# - envoyer le rapport à un backend HTTP sécurisé
+# - vérifier automatiquement les mises à jour au démarrage
+#
+# Remarques importantes :
+# - l'envoi de mail ne se fait PLUS directement via SMTP ici
+# - le client appelle un backend qui, lui, envoie le mail
+# - le backend protège donc les secrets SMTP côté serveur
+# ============================================================
 
-$mailFrom = "gerald.laronche@gmail.com"
-$mailTo = "jllsla@free.fr"
-$mailUser = "gerald.laronche@gmail.com"
-$mailPass = "yuttmuagkfqhyaxd"
+# =========================
+# CONFIG BACKEND API
+# =========================
+# URL publique du backend qui reçoit les rapports.
+$backendUrl = "https://diagnostic-pc-backend.onrender.com/api/diagnostic"
+
+# Clé API utilisée pour authentifier le client auprès du backend.
+# Remplacer par la clé de production active dans Render.
+$backendApiKey = "NO0stIUdprU6Enu1JuSnwGiot0IrTsiRwGHaYDvSVZ4="
 
 # =========================
 # CONFIG APP / UPDATE
 # =========================
-$AppVersion = "1.2"
+# Version actuelle de l'application.
+# À maintenir alignée avec :
+# - installer.iss
+# - la release GitHub
+$AppVersion = "1.3"
+
+# URL de l'API GitHub utilisée pour vérifier la dernière release publiée.
 $GitHubLatestApiUrl = "https://api.github.com/repos/Pinkywhisky/diagnostic-pc/releases/latest"
+
+# Nom exact de l'asset setup présent dans la release GitHub.
 $SetupAssetName = "Setup_Diagnostic_PC.exe"
 
 # =========================
 # VARIABLES GLOBALES
 # =========================
+# Dernier rapport généré, utilisé lors de l'envoi au backend.
 $script:LastReport = ""
+
+# Permet d'éviter plusieurs checks de mise à jour au démarrage.
 $script:UpdateChecked = $false
 
 # =========================
@@ -39,6 +63,7 @@ $form.BackColor = [System.Drawing.Color]::White
 # =========================
 # HEADER
 # =========================
+# Bandeau supérieur qui améliore la lisibilité générale de l'application.
 $panelTop = New-Object System.Windows.Forms.Panel
 $panelTop.Dock = "Top"
 $panelTop.Height = 95
@@ -70,6 +95,7 @@ $panelTop.Controls.Add($labelInfo)
 # =========================
 # ZONE TEXTE
 # =========================
+# Zone principale affichant le rapport généré.
 $textBox = New-Object System.Windows.Forms.TextBox
 $textBox.Multiline = $true
 $textBox.ScrollBars = "Vertical"
@@ -79,6 +105,7 @@ $textBox.Dock = "Fill"
 $textBox.BackColor = [System.Drawing.Color]::White
 $textBox.BorderStyle = "FixedSingle"
 
+# Conteneur avec padding pour éviter un rendu "collé" aux bords.
 $panelMain = New-Object System.Windows.Forms.Panel
 $panelMain.Dock = "Fill"
 $panelMain.Padding = New-Object System.Windows.Forms.Padding(12)
@@ -87,6 +114,7 @@ $panelMain.Controls.Add($textBox)
 # =========================
 # PANEL BAS
 # =========================
+# Zone inférieure contenant le statut et les boutons d'action.
 $panelBottom = New-Object System.Windows.Forms.Panel
 $panelBottom.Height = 70
 $panelBottom.Dock = "Bottom"
@@ -102,6 +130,7 @@ $statusLabel.ForeColor = [System.Drawing.Color]::DimGray
 # =========================
 # BOUTONS
 # =========================
+# Bouton principal : lancement du diagnostic.
 $buttonRun = New-Object System.Windows.Forms.Button
 $buttonRun.Text = "Lancer le diagnostic"
 $buttonRun.Size = New-Object System.Drawing.Size(180, 34)
@@ -112,6 +141,7 @@ $buttonRun.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
 $buttonRun.ForeColor = [System.Drawing.Color]::White
 $buttonRun.FlatAppearance.BorderSize = 0
 
+# Bouton d'envoi du rapport au backend.
 $buttonMail = New-Object System.Windows.Forms.Button
 $buttonMail.Text = "Envoyer par mail"
 $buttonMail.Size = New-Object System.Drawing.Size(140, 34)
@@ -121,6 +151,7 @@ $buttonMail.FlatStyle = "Flat"
 $buttonMail.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 $buttonMail.FlatAppearance.BorderColor = [System.Drawing.Color]::Silver
 
+# Bouton de fermeture.
 $buttonClose = New-Object System.Windows.Forms.Button
 $buttonClose.Text = "Fermer"
 $buttonClose.Size = New-Object System.Drawing.Size(100, 34)
@@ -129,6 +160,7 @@ $buttonClose.FlatStyle = "Flat"
 $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 $buttonClose.FlatAppearance.BorderColor = [System.Drawing.Color]::Silver
 
+# Le bouton Fermer reste aligné à droite même lors d'un redimensionnement.
 $panelBottom.Add_Resize({
         $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 16), 28)
     })
@@ -140,15 +172,19 @@ $panelBottom.Controls.Add($buttonRun)
 $panelBottom.Controls.Add($buttonMail)
 $panelBottom.Controls.Add($buttonClose)
 
+# Ajout des conteneurs à la fenêtre.
 $form.Controls.Add($panelMain)
 $form.Controls.Add($panelBottom)
 $form.Controls.Add($panelTop)
 
+# Entrée clavier pratique :
+# - Entrée -> lance le diagnostic
+# - Échap -> ferme la fenêtre
 $form.AcceptButton = $buttonRun
 $form.CancelButton = $buttonClose
 
 # =========================
-# FONCTIONS
+# FONCTIONS D'UTILITE UI
 # =========================
 function Set-Status {
     param(
@@ -161,7 +197,10 @@ function Set-Status {
 
 function Add-TextLine {
     param([string]$Text)
+
     $textBox.AppendText($Text + [Environment]::NewLine)
+
+    # Le curseur est repositionné en bas pour auto-scroller le rapport.
     $textBox.SelectionStart = $textBox.Text.Length
     $textBox.ScrollToCaret()
 }
@@ -170,6 +209,7 @@ function Add-Separator {
     Add-TextLine "=============================="
 }
 
+# Convertit un uptime en texte lisible.
 function Get-UptimeString {
     param([datetime]$LastBoot)
 
@@ -177,6 +217,7 @@ function Get-UptimeString {
     return "{0} jour(s) {1} heure(s) {2} minute(s)" -f $uptime.Days, $uptime.Hours, $uptime.Minutes
 }
 
+# Ajoute un problème critique à la liste si non vide et non déjà présent.
 function Add-CriticalProblem {
     param(
         [ref]$ProblemList,
@@ -188,6 +229,7 @@ function Add-CriticalProblem {
     }
 }
 
+# Ajoute un warning à la liste si non vide et non déjà présent.
 function Add-WarningProblem {
     param(
         [ref]$ProblemList,
@@ -199,6 +241,10 @@ function Add-WarningProblem {
     }
 }
 
+# =========================
+# FONCTIONS UPDATE
+# =========================
+# Supprime un éventuel "v" au début du tag GitHub : v1.2 -> 1.2
 function Get-NormalizedVersionString {
     param(
         [Parameter(Mandatory = $true)]
@@ -214,6 +260,7 @@ function Get-NormalizedVersionString {
     return $normalized
 }
 
+# Récupère la dernière release GitHub et vérifie si une mise à jour est disponible.
 function Get-LatestReleaseInfo {
     param(
         [Parameter(Mandatory = $true)]
@@ -266,6 +313,7 @@ function Get-LatestReleaseInfo {
     }
 }
 
+# Télécharge le setup de mise à jour dans %TEMP%\DiagnosticPC puis renvoie son chemin.
 function Start-AppUpdate {
     param(
         [Parameter(Mandatory = $true)]
@@ -293,6 +341,7 @@ function Start-AppUpdate {
 
     $tempFile = Join-Path $tempDir $FileName
 
+    # On supprime l'ancien setup si présent pour éviter de relancer un ancien fichier.
     if (Test-Path $tempFile) {
         Remove-Item $tempFile -Force
     }
@@ -311,34 +360,55 @@ function Start-AppUpdate {
     return $tempFile
 }
 
-function Send-DiagMail {
+# =========================
+# ENVOI DU RAPPORT AU BACKEND
+# =========================
+# Envoie le rapport au backend sécurisé.
+# Le backend se charge ensuite d'envoyer le mail.
+function Send-DiagReport {
     param(
-        [string]$Subject,
-        [string]$Body
+        [string]$ReportBody
     )
 
     try {
-        if ([string]::IsNullOrWhiteSpace($mailPass)) {
-            throw "Mot de passe Gmail non configuré."
+        if ([string]::IsNullOrWhiteSpace($backendUrl)) {
+            throw "URL backend non configurée."
         }
 
-        $message = New-Object System.Net.Mail.MailMessage
-        $message.From = $mailFrom
-        $message.To.Add($mailTo)
-        $message.Subject = $Subject
-        $message.Body = $Body
-        $message.IsBodyHtml = $false
-        $message.BodyEncoding = [System.Text.Encoding]::UTF8
-        $message.SubjectEncoding = [System.Text.Encoding]::UTF8
+        if ([string]::IsNullOrWhiteSpace($backendApiKey)) {
+            throw "Clé API backend non configurée."
+        }
 
-        $smtp = New-Object System.Net.Mail.SmtpClient($smtpServer, $smtpPort)
-        $smtp.EnableSsl = $smtpSsl
-        $smtp.Credentials = New-Object System.Net.NetworkCredential($mailUser, $mailPass)
+        if ([string]::IsNullOrWhiteSpace($ReportBody)) {
+            throw "Le rapport est vide."
+        }
 
-        $smtp.Send($message)
+        $payloadObject = @{
+            computer_name = [string]$env:COMPUTERNAME
+            username      = [string]$env:USERNAME
+            app_version   = [string]$AppVersion
+            report        = [string]$ReportBody
+        }
+
+        $payload = $payloadObject | ConvertTo-Json -Depth 3 -Compress
+
+        # Temporaire : debug console
+        Write-Host $payload
+
+        $headers = @{
+            "X-API-Key" = $backendApiKey
+        }
+
+        $null = Invoke-RestMethod `
+            -Uri $backendUrl `
+            -Method Post `
+            -Headers $headers `
+            -ContentType "application/json; charset=utf-8" `
+            -Body $payload `
+            -ErrorAction Stop
 
         [System.Windows.Forms.MessageBox]::Show(
-            "Mail envoyé avec succès.",
+            "Rapport envoyé avec succès.",
             "Envoi réussi",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Information
@@ -346,7 +416,7 @@ function Send-DiagMail {
     }
     catch {
         [System.Windows.Forms.MessageBox]::Show(
-            "Erreur lors de l'envoi du mail : $($_.Exception.Message)",
+            "Erreur lors de l'envoi du rapport : $($_.Exception.Message)",
             "Erreur d'envoi",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Error
@@ -354,6 +424,11 @@ function Send-DiagMail {
     }
 }
 
+# =========================
+# TEST TCP DISCRET
+# =========================
+# Test TCP natif pour éviter les effets de bord de Test-NetConnection
+# dans une application GUI packagée.
 function Test-TcpPort {
     param(
         [Parameter(Mandatory = $true)]
@@ -389,21 +464,28 @@ function Test-TcpPort {
     }
 }
 
+# =========================
+# DIAGNOSTIC PRINCIPAL
+# =========================
 function Start-Diag {
+    # On vide la zone de résultat avant un nouveau scan.
     $textBox.Clear()
     Set-Status "Diagnostic en cours..."
 
+    # Paramètres des tests réseau.
     $passerelle = $null
     $internet = "8.8.8.8"
     $dnsName = "google.com"
     $portTarget = "google.com"
     $ports = @(80, 443)
 
+    # Compteurs et listes de problèmes.
     $CriticalCount = 0
     $WarningCount = 0
     $CriticalProblems = [System.Collections.Generic.List[string]]::new()
     $WarningProblems = [System.Collections.Generic.List[string]]::new()
 
+    # En-tête du rapport.
     Add-Separator
     Add-TextLine "       DIAGNOSTIC PC"
     Add-Separator
@@ -413,6 +495,9 @@ function Start-Diag {
     Add-TextLine "Version outil : $AppVersion"
     Add-TextLine ""
 
+    # -------------------------
+    # SYSTEME
+    # -------------------------
     Add-TextLine "[SYSTEME]"
     try {
         $os = Get-CimInstance Win32_OperatingSystem
@@ -429,6 +514,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # BIOS
+    # -------------------------
     Add-TextLine "[BIOS]"
     try {
         $bios = Get-CimInstance Win32_BIOS
@@ -446,6 +534,10 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # RESEAU LOCAL
+    # -------------------------
+    # On récupère ici les interfaces actives et la passerelle par défaut.
     Add-TextLine "[RESEAU LOCAL]"
     try {
         $netConfigs = Get-NetIPConfiguration | Where-Object {
@@ -463,6 +555,7 @@ function Start-Diag {
                 Add-TextLine "DNS         : $([string]::Join(', ', $cfg.DNSServer.ServerAddresses))"
                 Add-TextLine ""
 
+                # Première passerelle IPv4 trouvée = passerelle testée ensuite.
                 if (-not $passerelle -and $cfg.IPv4DefaultGateway -and $cfg.IPv4DefaultGateway.NextHop) {
                     $passerelle = $cfg.IPv4DefaultGateway.NextHop
                 }
@@ -483,15 +576,26 @@ function Start-Diag {
     }
     Add-TextLine ""
     
+
+    # -------------------------
+    # RESEAU
+    # -------------------------
     Add-TextLine "[RESEAU]"
 
-    if (Test-Connection -ComputerName $passerelle -Count 1 -Quiet -ErrorAction SilentlyContinue) {
-        Add-TextLine "OK - Passerelle joignable ($passerelle)"
+    if ($passerelle) {
+        if (Test-Connection -ComputerName $passerelle -Count 1 -Quiet -ErrorAction SilentlyContinue) {
+            Add-TextLine "OK - Passerelle joignable ($passerelle)"
+        }
+        else {
+            Add-TextLine "CRITICAL - Passerelle non joignable ($passerelle)"
+            $CriticalCount++
+            Add-CriticalProblem ([ref]$CriticalProblems) "Passerelle non joignable ($passerelle)"
+        }
     }
     else {
-        Add-TextLine "CRITICAL - Passerelle non joignable ($passerelle)"
-        $CriticalCount++
-        Add-CriticalProblem ([ref]$CriticalProblems) "Passerelle non joignable ($passerelle)"
+        Add-TextLine "WARNING - Aucune passerelle par défaut détectée"
+        $WarningCount++
+        Add-WarningProblem ([ref]$WarningProblems) "Aucune passerelle par défaut détectée"
     }
 
     if (Test-Connection -ComputerName $internet -Count 1 -Quiet -ErrorAction SilentlyContinue) {
@@ -514,6 +618,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # PORTS
+    # -------------------------
     Add-TextLine "[PORTS]"
     foreach ($port in $ports) {
         try {
@@ -536,6 +643,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # CPU
+    # -------------------------
     Add-TextLine "[CPU]"
     try {
         $cpu = Get-CimInstance Win32_Processor
@@ -562,6 +672,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # RAM
+    # -------------------------
     Add-TextLine "[RAM]"
     try {
         $osRam = Get-CimInstance Win32_OperatingSystem
@@ -595,6 +708,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # DISQUES LOGIQUES
+    # -------------------------
     Add-TextLine "[DISQUES LOGIQUES]"
     try {
         $disques = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Sort-Object DeviceID
@@ -633,6 +749,9 @@ function Start-Diag {
         Add-TextLine ""
     }
 
+    # -------------------------
+    # DISQUES PHYSIQUES
+    # -------------------------
     Add-TextLine "[DISQUES PHYSIQUES]"
     try {
         $physicalDisks = Get-CimInstance Win32_DiskDrive
@@ -659,6 +778,9 @@ function Start-Diag {
         Add-TextLine ""
     }
 
+    # -------------------------
+    # SECURITE
+    # -------------------------
     Add-TextLine "[SECURITE]"
     try {
         $defender = Get-Service -Name WinDefend -ErrorAction SilentlyContinue
@@ -697,6 +819,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # SERVICES
+    # -------------------------
     Add-TextLine "[SERVICES]"
     $services = @("Spooler", "wuauserv", "WinDefend")
 
@@ -727,6 +852,9 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    # -------------------------
+    # RESULTAT FINAL
+    # -------------------------
     Add-Separator
     Add-TextLine "          RESULTAT"
     Add-Separator
@@ -809,10 +937,16 @@ function Start-Diag {
         }
     }
 
+    # On mémorise le rapport pour l'envoi au backend.
     $script:LastReport = $textBox.Text
     Set-Status "Diagnostic terminé"
 }
 
+# =========================
+# MISE A JOUR AUTO AU DEMARRAGE
+# =========================
+# Vérifie la dernière release au lancement de l'application.
+# Si une mise à jour existe, propose de la télécharger puis de lancer le setup.
 function Invoke-StartupUpdateCheck {
     try {
         Set-Status "Vérification des mises à jour..."
@@ -862,12 +996,13 @@ function Invoke-StartupUpdateCheck {
         $form.Close()
     }
     catch {
+        # Le check update ne doit pas bloquer l'usage du soft.
         Set-Status "Prêt"
     }
 }
 
 # =========================
-# ACTIONS
+# EVENEMENTS / ACTIONS
 # =========================
 $buttonRun.Add_Click({
         $buttonRun.Enabled = $false
@@ -903,19 +1038,19 @@ $buttonMail.Add_Click({
             [System.Windows.Forms.MessageBoxIcon]::Question
         )
 
-        if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
-            $subject = "Diagnostic PC - $env:COMPUTERNAME - $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
-            Send-DiagMail -Subject $subject -Body $script:LastReport
-        }
-    })
+    if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
+        Send-DiagReport -ReportBody $script:LastReport
+    }
+})
 
 $buttonClose.Add_Click({
         $form.Close()
     })
 
 # =========================
-# UPDATE AUTO AU DEMARRAGE
+# TIMER DE DEMARRAGE POUR LE CHECK UPDATE
 # =========================
+# Petit délai après affichage de la fenêtre pour éviter un démarrage brutal.
 $startupTimer = New-Object System.Windows.Forms.Timer
 $startupTimer.Interval = 800
 
