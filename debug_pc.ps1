@@ -392,9 +392,6 @@ function Send-DiagReport {
 
         $payload = $payloadObject | ConvertTo-Json -Depth 3 -Compress
 
-        # Temporaire : debug console
-        Write-Host $payload
-
         $headers = @{
             "X-API-Key" = $backendApiKey
         }

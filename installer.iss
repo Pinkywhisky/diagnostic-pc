@@ -1,6 +1,10 @@
+#define MyAppVersion "1.3"
+
 [Setup]
 AppName=Diagnostic PC
-AppVersion=1.3
+AppVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersion}.0.0
+VersionInfoTextVersion={#MyAppVersion}
 DefaultDirName={commonpf}\DiagnosticPC
 DefaultGroupName=Diagnostic PC
 OutputBaseFilename=Setup_Diagnostic_PC
