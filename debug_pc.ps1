@@ -130,8 +130,8 @@ $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 $buttonClose.FlatAppearance.BorderColor = [System.Drawing.Color]::Silver
 
 $panelBottom.Add_Resize({
-    $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 16), 28)
-})
+        $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 16), 28)
+    })
 
 $buttonClose.Location = New-Object System.Drawing.Point(($panelBottom.ClientSize.Width - $buttonClose.Width - 16), 28)
 
@@ -393,7 +393,7 @@ function Start-Diag {
     $textBox.Clear()
     Set-Status "Diagnostic en cours..."
 
-    $passerelle = "192.168.0.254"
+    $passerelle = $null
     $internet = "8.8.8.8"
     $dnsName = "google.com"
     $portTarget = "google.com"
@@ -446,6 +446,43 @@ function Start-Diag {
     }
     Add-TextLine ""
 
+    Add-TextLine "[RESEAU LOCAL]"
+    try {
+        $netConfigs = Get-NetIPConfiguration | Where-Object {
+            $_.IPv4Address -and $_.NetAdapter.Status -eq 'Up'
+        }
+
+        if ($netConfigs) {
+            foreach ($cfg in $netConfigs) {
+                $gatewayText = if ($cfg.IPv4DefaultGateway) { $cfg.IPv4DefaultGateway.NextHop } else { "Aucune" }
+
+                Add-TextLine "Interface   : $($cfg.InterfaceAlias)"
+                Add-TextLine "Description : $($cfg.NetAdapter.InterfaceDescription)"
+                Add-TextLine "IPv4        : $($cfg.IPv4Address.IPAddress)"
+                Add-TextLine "Passerelle  : $gatewayText"
+                Add-TextLine "DNS         : $([string]::Join(', ', $cfg.DNSServer.ServerAddresses))"
+                Add-TextLine ""
+
+                if (-not $passerelle -and $cfg.IPv4DefaultGateway -and $cfg.IPv4DefaultGateway.NextHop) {
+                    $passerelle = $cfg.IPv4DefaultGateway.NextHop
+                }
+            }
+        }
+        else {
+            Add-TextLine "CRITICAL - Aucune interface IPv4 active trouvée"
+            Add-TextLine ""
+            $CriticalCount++
+            Add-CriticalProblem ([ref]$CriticalProblems) "Aucune interface IPv4 active trouvée"
+        }
+    }
+    catch {
+        Add-TextLine "CRITICAL - Impossible de récupérer les informations réseau locales"
+        Add-TextLine ""
+        $CriticalCount++
+        Add-CriticalProblem ([ref]$CriticalProblems) "Impossible de récupérer les informations réseau locales"
+    }
+    Add-TextLine ""
+    
     Add-TextLine "[RESEAU]"
 
     if (Test-Connection -ComputerName $passerelle -Count 1 -Quiet -ErrorAction SilentlyContinue) {
@@ -476,36 +513,6 @@ function Start-Diag {
         Add-CriticalProblem ([ref]$CriticalProblems) "Résolution DNS impossible ($dnsName)"
     }
     Add-TextLine ""
-
-    Add-TextLine "[RESEAU LOCAL]"
-    try {
-        $netConfigs = Get-NetIPConfiguration | Where-Object {
-            $_.IPv4Address -and $_.NetAdapter.Status -eq 'Up'
-        }
-
-        if ($netConfigs) {
-            foreach ($cfg in $netConfigs) {
-                Add-TextLine "Interface   : $($cfg.InterfaceAlias)"
-                Add-TextLine "Description : $($cfg.NetAdapter.InterfaceDescription)"
-                Add-TextLine "IPv4        : $($cfg.IPv4Address.IPAddress)"
-                Add-TextLine "Passerelle  : $($cfg.IPv4DefaultGateway.NextHop)"
-                Add-TextLine "DNS         : $([string]::Join(', ', $cfg.DNSServer.ServerAddresses))"
-                Add-TextLine ""
-            }
-        }
-        else {
-            Add-TextLine "CRITICAL - Aucune interface IPv4 active trouvée"
-            Add-TextLine ""
-            $CriticalCount++
-            Add-CriticalProblem ([ref]$CriticalProblems) "Aucune interface IPv4 active trouvée"
-        }
-    }
-    catch {
-        Add-TextLine "CRITICAL - Impossible de récupérer les informations réseau locales"
-        Add-TextLine ""
-        $CriticalCount++
-        Add-CriticalProblem ([ref]$CriticalProblems) "Impossible de récupérer les informations réseau locales"
-    }
 
     Add-TextLine "[PORTS]"
     foreach ($port in $ports) {
@@ -863,48 +870,48 @@ function Invoke-StartupUpdateCheck {
 # ACTIONS
 # =========================
 $buttonRun.Add_Click({
-    $buttonRun.Enabled = $false
-    $buttonRun.Text = "En cours..."
-    $form.Cursor = "WaitCursor"
-    $form.Refresh()
+        $buttonRun.Enabled = $false
+        $buttonRun.Text = "En cours..."
+        $form.Cursor = "WaitCursor"
+        $form.Refresh()
 
-    try {
-        Start-Diag
-    }
-    finally {
-        $buttonRun.Enabled = $true
-        $buttonRun.Text = "Lancer le diagnostic"
-        $form.Cursor = "Default"
-    }
-})
+        try {
+            Start-Diag
+        }
+        finally {
+            $buttonRun.Enabled = $true
+            $buttonRun.Text = "Lancer le diagnostic"
+            $form.Cursor = "Default"
+        }
+    })
 
 $buttonMail.Add_Click({
-    if ([string]::IsNullOrWhiteSpace($script:LastReport)) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Aucun diagnostic à envoyer. Lance d'abord le diagnostic.",
-            "Information",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
-        return
-    }
+        if ([string]::IsNullOrWhiteSpace($script:LastReport)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Aucun diagnostic à envoyer. Lance d'abord le diagnostic.",
+                "Information",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            ) | Out-Null
+            return
+        }
 
-    $confirmation = [System.Windows.Forms.MessageBox]::Show(
-        "Autorisez-vous l'envoi du résultat à Gérald Laronche par mail ?",
-        "Confirmation d'envoi",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Question
-    )
+        $confirmation = [System.Windows.Forms.MessageBox]::Show(
+            "Autorisez-vous l'envoi du résultat à Gérald Laronche par mail ?",
+            "Confirmation d'envoi",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question
+        )
 
-    if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
-        $subject = "Diagnostic PC - $env:COMPUTERNAME - $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
-        Send-DiagMail -Subject $subject -Body $script:LastReport
-    }
-})
+        if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
+            $subject = "Diagnostic PC - $env:COMPUTERNAME - $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+            Send-DiagMail -Subject $subject -Body $script:LastReport
+        }
+    })
 
 $buttonClose.Add_Click({
-    $form.Close()
-})
+        $form.Close()
+    })
 
 # =========================
 # UPDATE AUTO AU DEMARRAGE
@@ -913,17 +920,17 @@ $startupTimer = New-Object System.Windows.Forms.Timer
 $startupTimer.Interval = 800
 
 $startupTimer.Add_Tick({
-    $startupTimer.Stop()
+        $startupTimer.Stop()
 
-    if (-not $script:UpdateChecked) {
-        $script:UpdateChecked = $true
-        Invoke-StartupUpdateCheck
-    }
-})
+        if (-not $script:UpdateChecked) {
+            $script:UpdateChecked = $true
+            Invoke-StartupUpdateCheck
+        }
+    })
 
 $form.Add_Shown({
-    $startupTimer.Start()
-})
+        $startupTimer.Start()
+    })
 
 # =========================
 # AFFICHAGE
